@@ -1,0 +1,28 @@
+[
+{
+    "full_path" : "hls/solve.cpp",
+    "filename" : "solve.cpp",
+    "name" : "solve",
+    "type" : 4439849185,
+    "num_instances" : 1,
+    "task_creation" : true,
+    "instrumentation" : false,
+    "periodic" : false,
+    "lock" : false,
+    "deps" : true,
+    "ompif" : true
+},
+{
+    "full_path" : "hls/computeBlock.cpp",
+    "filename" : "computeBlock.cpp",
+    "name" : "computeBlock",
+    "type" : 5050920982,
+    "num_instances" : 1,
+    "task_creation" : false,
+    "instrumentation" : false,
+    "periodic" : false,
+    "lock" : false,
+    "deps" : false,
+    "ompif" : false
+}
+]
