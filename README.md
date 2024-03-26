@@ -70,7 +70,7 @@ The code just implements the update of a single 256x256 block.
 However, in order to get some performance we have to get the code a bit messy.
 Everything important is in function `computeBlock_moved`.
 You will see this variable declaration
-``` C
+``` C++
 	constexpr int ITER_LAT = 76;
 	constexpr int ROWPADDING = 1;
 	constexpr int LPADDING = 64 / sizeof(double);
@@ -105,24 +105,66 @@ Up until now we have seen how a block is loaded from memory to BRAMs in `local`,
 The update part is divided in three loops: `upper_triangle_no_collapse`, `middle_collapse`, `lower_triangle_no_collapse`.
 The main idea to get performance is to pipeline the loop that updates positions, and unroll it if possible so we can update several positions every cycle.
 However, we have seen in the description section that there are many dependencies between neighbor elements, so a simple double loop won't work.
-To simplify the code, the following examples do not use padding and use square matrices (which is true in our case because the block size is always square), so the $i,j$ range is from 0 to $n$.
-```C
+To simplify the code, the following examples do not use padding and use square matrices (which is true in our case because the block size is always square), so the $i,j$ range is from 0 to $n-1$.
+```C++
 for (int i = 0; i < n; ++i)
   for (int j = 0; j < n; ++j)
     A[i][j] = ...
 ```
 If we try to pipeline the innermost loop, we will get a carried dependency warning, because the results of one iteration are needed by the next one, preventing the loop from reaching II=1.
 For that, we need to traverse the block in anti-diagonal order, since all elements in the same anti-diagonal can be updated in parallel:
-```C
+```C++
 upper_triangle:
 for (int d = 1; d <= n; ++d)
   for (int i = d-1, j = 0; i >= 0 || j < d; --i, ++j)
     A[i][j] = ...
 lower_triangle:
 for (int d = 1; d < n; ++d)
-  for (int i = n-1, j = d; i >= d || j < n-1; --i, ++j)
+  for (int i = n-1, j = d; i >= d || j < n; --i, ++j)
     A[i][j] = ...
 ```
+![heat_animation (5)](https://github.com/bsc-pm-ompss-at-fpga/distributed_Heat/assets/17345627/d7141507-273b-45a4-9f46-11ff72f25488)
+
+This image shows how the upper (red) and lower (green) triangles formed by the anti-diagonals.
+The numbers show the anti-diagonal ($d$, starting at 1) each matrix element belongs to in their respective triangle.
+
 The first loop updates all the anti-diagonals for the upper triangle (including the main anti-diagnoal when $d == n$), and the second loop updates the remaining anti-diagonals of the lower triangle.
 There are two conditions in both innsermost loops that are completetely equivalent, I show them for completeness but only one is enough.
-Both loops can be merged into one, by adding conditionals to the initial value of $i,j$ and the innermost loop finalization condition.
+In fact, both loops can be merged, and the result is:
+```C++
+for (int d = 1; d < 2*n; ++d)
+  for (int i = d <= n ? d-1 : n-1,
+           j = d <= n ? 0   : d-n;
+       i >= 0 && j < n; --i, ++j)
+    A[i][j] = ...
+```
+
+Now we can pipeline the innermost loop `ij` with II=1, however this loop can't get flattened because it's not a trivial loop (the iteration count is not constant).
+Thus, between two iterations of the outermost `d` loop we have to pay the latency of the `ij` loop.
+We can flatten manually both loops into one, however there is a dependency between iterations when `d` is different.
+The loop has a latency $L$, which means that on a certain cycle $t$, the value of $i,j$ in that iteration is updated at cycle $t+L$, assuming II=1.
+
+On a certain diagonal $d$ of the upper triangle, any $i,j$ iteration starting at cycle $t$ has to finish by cycle $t+d$, because in this cycle the $i+1,j$ iteration starts in diagonal $d+1$, which needs the updated $i,j$ value.
+Therefore, if we pipeline the collpased loop, we have to ensure that $L <= d$ for all values of $d$ produced by the loop.
+Similarly, in the lower triangle, any $i,j$ iteration, except when $i == n-1$, of diagonal $d$ starting at cycle $t$ needs to finish before the starting cycle of $i+1,j$ in diagonal $d+1$, which happens in cycle $t+n-d-1$.
+When $i == n-1$, the dependency is with iteration $i,j+1$ which happens at cycle $t+n-d$.
+Since the first condition is more restrictive, to avoid dependencies we need $L < d$.
+If we want to use a single loop for both triangles, then we have to use the condition $L < d$.
+
+![heat_animation (4)](https://github.com/bsc-pm-ompss-at-fpga/distributed_Heat/assets/17345627/81e4ebc2-68be-45e2-a345-e922d5291197)
+
+This image shows the starting cycle of each iteration for diagonal 3 of the upper triangle and 2 of the lower triangle.
+We can see that for the first case, at cycle 3 we need the value of $(0,1)$ calculated, while in the second case we need the value of $(3,3)$ by cycle 2.
+
+The condition $L < d$ determines which anti-diagonals are calculated in a single pipelined, collapsed loop.
+The trailing anti-diagonals are calculated with the double loop without collapse.
+The value of $L$ is stored in `ITER_LAT` in the code, this is why there are three loops.
+In summary, the following image shows which parts of the block are updated by each loop.
+
+![heat_animation (2)](https://github.com/bsc-pm-ompss-at-fpga/distributed_Heat/assets/17345627/6ae51381-4129-41e4-9eb8-0f6bb611ff0c)
+
+However, there is one last plot twist.
+We can in fact unroll manually the loops to get double performance.
+This is a tradeoff, because if we calculate two elements per cycle, the amount of anti-diagonals we can calculate in the collapsed loop gets reduced, and `ITER_LAT=2L`.
+It depends on the actual latency $L$, which is reported by Vitis HLS, and the block size.
+You can actually calculate if it is better to unroll, or even find the sweet spot for the block size, but the formulas are too big to put here.
