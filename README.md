@@ -12,6 +12,20 @@ The Heat benchmark simulates the propagation of heat on a 2D surfate following t
 ![image](https://github.com/bsc-pm-ompss-at-fpga/distributed_Heat/assets/17345627/8fa75bd6-f204-464e-b3fa-79657ad8b48f)
 
 $i,j$ are the row and column index respectively, and $k$ is the step number.
+`A` is the matrix, with dimensions $(n+2) \times (m+2)$.
+The padding rows and columns are used to set the initial heat points, and to avoid reading out of range.
+Thus, the range of $i,j$ is $i \in [1, n]$ and $j \in [1, m]$.
+
+<img src="https://github.com/bsc-pm-ompss-at-fpga/distributed_Heat/assets/17345627/ba3e6400-cbd5-46ff-86d8-cb7b1f541781" width="256" height="256" /> ![heat_animation](https://github.com/bsc-pm-ompss-at-fpga/distributed_Heat/assets/17345627/e0770ef6-e25c-4623-9933-7cd53b3c7c0d)
+
+The left figure shows the initial matrix with the padding rows and columns.
+Blue color means temperature 0, and the more read, the higher the temperature is.
+Thus, initially the matrix is set to 0, and the padding rows and columns have the inital values with temperatures different from 0.
+In the right image we see an animation of the heat propagation over time.
+Every frame shows the matrix in a different timestep.
+Both images are at different resolutions to improve visualization.
+The left one is 32x32, while the animation is set at 256x256.
+
 This benchmark uses a Gauss-Seidel method, which means the same matrix is used as input and output.
 Therefore, in order to parallelize this applications we have to look at the dependencies the sequential version creates.
 As the formula tells, each position is calculated with the value of the previous step for the right and down neighbors, and the value of the current step of the up and left neighbors.
@@ -49,3 +63,21 @@ Then, before starting the current step, every rank needs rows from their bottom 
 Each OMPIF_Send/Recv only sends the row of a block, therefore there are as many tasks as blocks in a single row.
 After the data exchange, the top rank can start, and as soon as the blocks are updated, it can send the updated rows to the bottom neighbors.
 
+## FPGA implementation
+
+Although the formula to update the matrix is simple, you will see that file `computeBlock.cpp` is far from being understandable, at least on the first read.
+The code just implements the update of a single 256x256 block.
+However, in order to get some performance we have to get the code a bit messy.
+Everything important is in function `computeBlock_moved`.
+You will see this variable declaration
+``` C
+	constexpr int ITER_LAT = 76;
+	constexpr int ROWPADDING = 1;
+	constexpr int LPADDING = 64 / sizeof(double);
+	constexpr int RPADDING = 1;
+	double local[BS + ROWPADDING*2][BS + LPADDING + RPADDING];
+````
+
+`local` stores the block in BRAM, which is must faster to access and lets you configure the amount of ports for parallel reads/writes.
+`BS` is the block size, in this case 256.
+However, `local` has extra rows and columns, defined by the padding constants.
