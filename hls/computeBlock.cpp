@@ -101,7 +101,7 @@ void computeBlock_moved(const int cols, unsigned long long int M, ap_uint<256> *
 		int d = ITER_LAT;
 		r = d - 2 + ROWPADDING;
 		c = LPADDING;
-		middle_pipe : while (d <= 2*BS - ITER_LAT)
+		middle_collapse : while (d <= 2*BS - ITER_LAT)
 		{
 #pragma HLS pipeline II=1
 #pragma HLS dependence variable=local inter false
