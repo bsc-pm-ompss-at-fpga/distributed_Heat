@@ -99,3 +99,30 @@ The left figure is the block stored in `local`, while the right figure is the wh
 The orange rows are the contents of the block that will be updated by the task.
 The green rows are part of the padding of the matrix, while the blue rows are part of the padding of `local`, but are not in the padding of the matrix, thus they are updated by another task.
 In this example, the code will do 9 loads, one for each row including padding, and after updating the block, it will store 7 rows without padding.
+
+Now lets see what the `ITER_LAT` is about.
+Up until now we have seen how a block is loaded from memory to BRAMs in `local`, and stored back to memory.
+The update part is divided in three loops: `upper_triangle_no_collapse`, `middle_collapse`, `lower_triangle_no_collapse`.
+The main idea to get performance is to pipeline the loop that updates positions, and unroll it if possible so we can update several positions every cycle.
+However, we have seen in the description section that there are many dependencies between neighbor elements, so a simple double loop won't work.
+To simplify the code, the following examples do not use padding and use square matrices (which is true in our case because the block size is always square), so the $i,j$ range is from 0 to $n$.
+```C
+for (int i = 0; i < n; ++i)
+  for (int j = 0; j < n; ++j)
+    A[i][j] = ...
+```
+If we try to pipeline the innermost loop, we will get a carried dependency warning, because the results of one iteration are needed by the next one, preventing the loop from reaching II=1.
+For that, we need to traverse the block in anti-diagonal order, since all elements in the same anti-diagonal can be updated in parallel:
+```C
+upper_triangle:
+for (int d = 1; d <= n; ++d)
+  for (int i = d-1, j = 0; i >= 0 || j < d; --i, ++j)
+    A[i][j] = ...
+lower_triangle:
+for (int d = 1; d < n; ++d)
+  for (int i = n-1, j = d; i >= d || j < n-1; --i, ++j)
+    A[i][j] = ...
+```
+The first loop updates all the anti-diagonals for the upper triangle (including the main anti-diagnoal when $d == n$), and the second loop updates the remaining anti-diagonals of the lower triangle.
+There are two conditions in both innsermost loops that are completetely equivalent, I show them for completeness but only one is enough.
+Both loops can be merged into one, by adding conditionals to the initial value of $i,j$ and the innermost loop finalization condition.
