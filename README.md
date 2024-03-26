@@ -80,4 +80,22 @@ You will see this variable declaration
 
 `local` stores the block in BRAM, which is must faster to access and lets you configure the amount of ports for parallel reads/writes.
 `BS` is the block size, in this case 256.
-However, `local` has extra rows and columns, defined by the padding constants.
+However, `local` has extra rows and columns, defined by the `ROWPADDING`, `LPADDING` and `RPADDING` constants.
+The padding is not symmetric due to how the code accesses memory.
+A common technique to increase memory bandwidth is to use a high bit-width data bus to read and write memory, so we can read/write multiple data elements in parallel.
+For example, in the Heat case we use a port of 256-bit (the width of the Alveo U55C HBM), which is equivalent to loading 4 doubles.
+However, to do that we access memory through an pointer to an `ap_uint<256>` type, therefore the addresses must be aligned to 32 bytes.
+This is why we add a padding of 64 bytes on the left and right columns of the matrix, so we can support memory bus widths up to 512 bits (the usual case of FPGA DDR4 memories).
+For the `local` array, we only need to add 64 bytes of padding in the left column, because we read by rows and there is no alignment constraint for BRAMs.
+Both matrix and `local` are stored by consecutive rows, but the row size of the matrix (set by the user at runtime) is bigger than `local` (256).
+This prevents us from doing a single consecutive copy when loading a block in `local`.
+The next image shows the memory layout of both `local` and the input matrix.
+
+<p align=center>
+    <img src="https://github.com/bsc-pm-ompss-at-fpga/distributed_Heat/assets/17345627/67f7e82b-5cf8-4520-8b37-b2b15f5162be" width=514 height=250>
+</p>
+
+The left figure is the block stored in `local`, while the right figure is the whole matrix.
+The orange rows are the contents of the block that will be updated by the task.
+The green rows are part of the padding of the matrix, while the blue rows are part of the padding of `local`, but are not in the padding of the matrix, thus they are updated by another task.
+In this example, the code will do 9 loads, one for each row including padding, and after updating the block, it will store 7 rows without padding.
