@@ -66,7 +66,7 @@ int main(int argc, char **argv)
 	nanos6_dist_memcpy_to_device(nranks-1, conf.matrix, cols*sizeof(double), (rows-DPADDING)*cols*sizeof(double), (UPADDING+rowsPerDevice)*cols*sizeof(double));
 	end = getTime();
 	double bandwidth = ((conf.rows+2)*cols*sizeof(double))/(end-start);
-	fprintf(stderr, "Copy bandwidth %gMB/s\n", bandwidth/1024/1024);
+	fprintf(stderr, "Copy bandwidth %gMB/s\n", bandwidth/1e6);
 
 	// Solve the problem
 	start = getTime();
