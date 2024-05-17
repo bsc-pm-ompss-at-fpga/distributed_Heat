@@ -32,7 +32,6 @@ struct __fpga_copyinfo_t {
 	unsigned int size;
 };
 struct __data_owner_info_t {
-	unsigned long long int address;
 	unsigned long long int size;
 	unsigned char owner;
 };
@@ -116,9 +115,6 @@ static void gaussSeidelSolver_moved(int64_t cols, int nrb, int ncb, __mcxx_ptr_t
 				unsigned long long int __mcxx_args[2L];
 				unsigned long long int __mcxx_deps[7L];
 				const int localR = R - __ompif_rank*blocks_per_rank - 1;
-				const unsigned char owner = (R-1)/blocks_per_rank;
-				const unsigned long long int address_up = owner == __ompif_rank ? M + (UPADDING-1)*cols + LPADDING + (C-1)*BS : M + (UPADDING + blocks_per_rank*BS - 1)*cols + LPADDING + (C-1)*BS;
-				const unsigned long long int address_down = owner == __ompif_rank ? M + (UPADDING + blocks_per_rank*BS)*cols + LPADDING + (C-1)*BS : M + UPADDING*cols + LPADDING + (C-1)*BS;
 				__mcxx_cast<int> cast_param_0;
 				cast_param_0.typed = cols;
 				__mcxx_args[0] = cast_param_0.raw;
@@ -129,9 +125,9 @@ static void gaussSeidelSolver_moved(int64_t cols, int nrb, int ncb, __mcxx_ptr_t
 				__mcxx_dep_0 = M + (UPADDING + localR*BS - 1)*cols + LPADDING + (C-1)*BS;
 				__mcxx_deps[0] = 1LLU << 58 | __mcxx_dep_0.val;
 				__mcxx_ptr_t<char> __mcxx_dep_1;
-				__mcxx_dep_1 = M + (UPADDING + localR*BS)*cols + LPADDING + (C-1)*BS;
+				__mcxx_dep_1 = M + (UPADDING + (localR+1)*BS)*cols + LPADDING + (C-1)*BS;
 				__mcxx_deps[1] = 3LLU << 58 | __mcxx_dep_1.val;
-				__mcxx_ptr_t<char> __mcxx_dep_2 = M + (UPADDING + (localR+1)*BS)*cols + LPADDING + (C-1)*BS;
+				__mcxx_ptr_t<char> __mcxx_dep_2 = M + (UPADDING + localR*BS)*cols + LPADDING + (C-1)*BS;
 				__mcxx_deps[2] = 1LLU << 58 | __mcxx_dep_2.val;
 				__mcxx_ptr_t<char> __mcxx_dep_3 = M + (UPADDING + (localR+1)*BS - 1)*cols + LPADDING + (C-1)*BS;
 				__mcxx_deps[3] = 3LLU << 58 | __mcxx_dep_3.val;
@@ -145,11 +141,11 @@ static void gaussSeidelSolver_moved(int64_t cols, int nrb, int ncb, __mcxx_ptr_t
 				__mcxx_dep_6 = reps + R*ncb + C;
 				__mcxx_deps[6] = 3LLU << 58 | __mcxx_dep_6.val;
 				__data_owner_info_t data_owners[2];
-				const __data_owner_info_t data_owner_0 = {.address = address_up, .size = BS*sizeof(double), .owner = calc_owner(R-1, nrb, __ompif_size, blocks_per_rank)};
+				const __data_owner_info_t data_owner_0 = {.size = BS*sizeof(double), .owner = calc_owner(R-1, nrb, __ompif_size, blocks_per_rank)};
 				data_owners[0] = data_owner_0;
-				const __data_owner_info_t data_owner_1 = {.address = address_down, .size = BS*sizeof(double), .owner = calc_owner(R+1, nrb, __ompif_size, blocks_per_rank)};
+				const __data_owner_info_t data_owner_1 = {.size = BS*sizeof(double), .owner = calc_owner(R+1, nrb, __ompif_size, blocks_per_rank)};
 				data_owners[1] = data_owner_1;
-				mcxx_task_create(5050920982LLU, 255, 2, __mcxx_args, 7, __mcxx_deps, 0, 0, 2, data_owners, mcxx_outPort, __ompif_rank, __ompif_size, owner);
+				mcxx_task_create(5050920982LLU, 255, 2, __mcxx_args, 7, __mcxx_deps, 0, 0, 2, data_owners, mcxx_outPort, __ompif_rank, __ompif_size, (R-1)/blocks_per_rank);
 			}
 			;
 		}
@@ -320,12 +316,12 @@ void mcxx_task_create(const ap_uint<64> type, const ap_uint<8> instanceNum, cons
 		const unsigned int size = data_owners[i].size;
 		const bool is_in = (deps[i] >> 58) & 0x1;
 		if (owner != rank && data_owner == rank && is_in) {
-			const unsigned long long addr = data_owners[i].address;
+			const unsigned long long addr = deps[i] & 0x00FFFFFFFFFFFFFF;
 			const unsigned long long int dep[2] = {addr | (1LLU << 58), 0x0000100000000000LLU | (3LLU << 58)};
 			OMPIF_Send((void*)addr, size, owner, 2, dep, mcxx_outPort);
 		}
 		else if (owner == rank && data_owner != rank && is_in) {
-			const unsigned long long addr = data_owners[i].address;
+			const unsigned long long addr = deps[i] & 0x00FFFFFFFFFFFFFF;
 			const unsigned long long int dep[2] = {addr | (2LLU << 58), 0x0000200000000000LLU | (3LLU << 58)};
 			OMPIF_Recv((void*)addr, size, data_owner, 2, dep, mcxx_outPort);
 		}
