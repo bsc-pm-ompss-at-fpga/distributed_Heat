@@ -126,9 +126,9 @@ static void gaussSeidelSolver_moved(int64_t cols, int nrb, int ncb, __mcxx_ptr_t
 				__mcxx_deps[0] = 1LLU << 58 | __mcxx_dep_0.val;
 				__mcxx_ptr_t<char> __mcxx_dep_1;
 				__mcxx_dep_1 = M + (UPADDING + (localR+1)*BS)*cols + LPADDING + (C-1)*BS;
-				__mcxx_deps[1] = 3LLU << 58 | __mcxx_dep_1.val;
+				__mcxx_deps[1] = 1LLU << 58 | __mcxx_dep_1.val;
 				__mcxx_ptr_t<char> __mcxx_dep_2 = M + (UPADDING + localR*BS)*cols + LPADDING + (C-1)*BS;
-				__mcxx_deps[2] = 1LLU << 58 | __mcxx_dep_2.val;
+				__mcxx_deps[2] = 3LLU << 58 | __mcxx_dep_2.val;
 				__mcxx_ptr_t<char> __mcxx_dep_3 = M + (UPADDING + (localR+1)*BS - 1)*cols + LPADDING + (C-1)*BS;
 				__mcxx_deps[3] = 3LLU << 58 | __mcxx_dep_3.val;
 				__mcxx_ptr_t<char> __mcxx_dep_4;
